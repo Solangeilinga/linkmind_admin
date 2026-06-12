@@ -15,8 +15,16 @@ export default function LoginPage() {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
-      const res = await api.post<{ token: string; admin: object }>("/api/auth/login", form);
-      saveSession(res.token, res.admin);
+      const res = await api.post<{
+        token: string;
+        accessToken?: string;
+        refreshToken?: string;
+        admin: object;
+      }>("/api/auth/login", form);
+
+      // Supporte les deux formats : ancien (token) et nouveau (accessToken + refreshToken)
+      const accessToken = res.accessToken || res.token;
+      saveSession(accessToken, res.admin, res.refreshToken);
       router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "Erreur de connexion");

@@ -50,39 +50,85 @@ function providerIcon(p?: string) {
 }
 function eventLabel(event: string) {
   const map: Record<string, string> = {
-    booking_created:        "📩 Demande créée",
+    booking_created:          "📩 Demande créée",
     booking_confirmed_by_pro: "✅ Confirmée par le professionnel",
-    session_completed:      "🏁 Séance terminée",
+    session_completed:        "🏁 Séance terminée",
   };
   return map[event] || event;
 }
 
+// ─── Normalisation réponse ─────────────────────────────────────────────────────
+// L'admin backend renvoie { data: [...], pagination: {...} }
+// mais bookings/page.tsx attendait { bookings: [...], total: N }
+function normalizeBookingList(res: any): { bookings: Booking[]; total: number } {
+  // Format admin backend : { data: [], pagination: { total } }
+  if (res?.data && Array.isArray(res.data)) {
+    return {
+      bookings: res.data.map(normalizeBooking),
+      total: res.pagination?.total ?? res.data.length,
+    };
+  }
+  // Format backend principal : { bookings: [], total: N }
+  if (res?.bookings && Array.isArray(res.bookings)) {
+    return { bookings: res.bookings.map(normalizeBooking), total: res.total ?? res.bookings.length };
+  }
+  return { bookings: [], total: 0 };
+}
+
+function normalizeBooking(b: any): Booking {
+  // L'admin backend populate user avec { name, email } alors que le backend principal
+  // renvoie { displayName, city, age } (anonymisé). On normalise ici.
+  const user: UserAnon = b.user?.displayName
+    ? b.user
+    : {
+        displayName: b.user?.anonymousAlias
+          || (b.user?.name ? b.user.name : `User_${String(b.user?._id ?? "").slice(-6) || "??????"}`),
+        city: b.user?.city,
+        age:  b.user?.age,
+      };
+
+  const professional: Professional = b.professional
+    ? {
+        fullName:     `${b.professional.firstName ?? ""} ${b.professional.lastName ?? ""}`.trim()
+                      || b.professional.fullName || "—",
+        type:         b.professional.type || "",
+        city:         b.professional.city,
+        sessionPrice: b.professional.sessionPrice,
+        currency:     b.professional.currency,
+      }
+    : { fullName: "—", type: "" };
+
+  return { ...b, user, professional };
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function BookingsPage() {
-  const [bookings, setBookings]     = useState<Booking[]>([]);
-  const [stats,    setStats]        = useState<Stats | null>(null);
-  const [status,   setStatus]       = useState<StatusFilter>("pending");
-  const [loading,  setLoading]      = useState(true);
-  const [page,     setPage]         = useState(1);
-  const [totalPages,setTotalPages]  = useState(1);
-  const [logModal, setLogModal]     = useState<Booking | null>(null);
-  const [cancelModal,setCancelModal]= useState<Booking | null>(null);
-  const [cancelNote, setCancelNote] = useState("");
-  const [saving,   setSaving]       = useState(false);
-  const [toast,    setToast]        = useState("");
+  const [bookings, setBookings]      = useState<Booking[]>([]);
+  const [stats,    setStats]         = useState<Stats | null>(null);
+  const [status,   setStatus]        = useState<StatusFilter>("pending");
+  const [loading,  setLoading]       = useState(true);
+  const [page,     setPage]          = useState(1);
+  const [totalPages, setTotalPages]  = useState(1);
+  const [logModal, setLogModal]      = useState<Booking | null>(null);
+  const [cancelModal, setCancelModal]= useState<Booking | null>(null);
+  const [cancelNote, setCancelNote]  = useState("");
+  const [saving,   setSaving]        = useState(false);
+  const [toast,    setToast]         = useState("");
 
   const showToast = (msg: string, dur = 4000) => { setToast(msg); setTimeout(() => setToast(""), dur); };
 
   const fetchData = useCallback(async (p = 1) => {
     setLoading(true);
     try {
+      // ✅ Appel sur l'admin backend (/api/bookings) — pas sur /api/professionals/bookings/admin
       const qs = status !== "all" ? `&status=${status}` : "";
-      const [bRes, sRes] = await Promise.all([
-        api.get<{ bookings: Booking[]; total: number }>(`/api/professionals/bookings/admin?page=${p}&limit=15${qs}`),
+      const [raw, sRes] = await Promise.all([
+        api.get<any>(`/api/bookings?page=${p}&limit=15${qs}`),
         api.get<Stats>("/api/bookings/stats").catch(() => null),
       ]);
-      setBookings(bRes.bookings);
-      setTotalPages(Math.ceil((bRes.total || 0) / 15) || 1);
+      const { bookings: bList, total } = normalizeBookingList(raw);
+      setBookings(bList);
+      setTotalPages(Math.ceil((total || 0) / 15) || 1);
       if (sRes) setStats(sRes);
     } catch (e: any) { showToast("❌ " + e.message); }
     finally { setLoading(false); }
@@ -95,7 +141,8 @@ export default function BookingsPage() {
     if (!cancelModal || !cancelNote.trim()) return;
     setSaving(true);
     try {
-      await api.post(`/api/professionals/bookings/${cancelModal._id}/cancel`, { reason: cancelNote });
+      // ✅ Route correcte sur l'admin backend
+      await api.post(`/api/bookings/${cancelModal._id}/cancel`, { reason: cancelNote });
       showToast("✅ Réservation annulée — email envoyé à l'utilisateur.");
       setCancelModal(null); setCancelNote(""); fetchData(page);
     } catch (e: any) { showToast("❌ " + e.message); }
@@ -105,7 +152,8 @@ export default function BookingsPage() {
   const completeBooking = async (b: Booking) => {
     if (!confirm("Marquer cette séance comme terminée ?")) return;
     try {
-      await api.post(`/api/professionals/bookings/${b._id}/complete`, {});
+      // ✅ Route correcte sur l'admin backend (PATCH, pas POST)
+      await api.patch(`/api/bookings/${b._id}/complete`, {});
       showToast("✅ Séance marquée comme terminée — traçabilité enregistrée.");
       fetchData(page);
     } catch (e: any) { showToast("❌ " + e.message); }
@@ -267,7 +315,7 @@ export default function BookingsPage() {
                         <span>Reçue le {fmtDate(b.createdAt)}</span>
                       </div>
 
-                      {/* Lien visio (généré après confirmation) */}
+                      {/* Lien visio */}
                       {b.meetingLink && (
                         <div className="mt-3 flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5">
                           <span className="text-base">{providerIcon(b.meetingProvider)}</span>
@@ -287,14 +335,12 @@ export default function BookingsPage() {
                         </div>
                       )}
 
-                      {/* Statut "en attente" — info sur le flux */}
                       {b.status === "pending" && (
                         <div className="mt-3 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 text-xs text-amber-800">
                           ⏳ En attente de confirmation par le professionnel. Un email avec un lien de confirmation lui a été envoyé.
                         </div>
                       )}
 
-                      {/* Note admin */}
                       {b.adminNote && (
                         <div className="mt-2 text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-1.5">
                           📋 {b.adminNote}
@@ -303,23 +349,18 @@ export default function BookingsPage() {
 
                       {/* Actions */}
                       <div className="flex gap-2 mt-4 flex-wrap">
-                        {/* Voir la traçabilité */}
                         {(b.adminLog?.length || 0) > 0 && (
                           <button onClick={() => setLogModal(b)}
                             className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition">
                             📋 Traçabilité ({b.adminLog!.length})
                           </button>
                         )}
-
-                        {/* Marquer terminé */}
                         {b.status === "confirmed" && (
                           <button onClick={() => completeBooking(b)}
                             className="px-3 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-xl transition">
                             ✔ Marquer terminée
                           </button>
                         )}
-
-                        {/* Annuler (admin peut annuler pending ou confirmed) */}
                         {(b.status === "pending" || b.status === "confirmed") && (
                           <button onClick={() => { setCancelModal(b); setCancelNote(""); }}
                             className="px-3 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-xl transition">
@@ -347,7 +388,7 @@ export default function BookingsPage() {
         </main>
       </div>
 
-      {/* ── Modal Traçabilité admin (en DB, pas de mail) ── */}
+      {/* Modal Traçabilité */}
       {logModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[80vh] overflow-y-auto">
@@ -384,7 +425,7 @@ export default function BookingsPage() {
         </div>
       )}
 
-      {/* ── Modal Annuler ── */}
+      {/* Modal Annuler */}
       {cancelModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">

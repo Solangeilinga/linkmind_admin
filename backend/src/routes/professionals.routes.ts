@@ -37,6 +37,54 @@ router.get("/", requireRole("admin"), async (req: AdminRequest, res: Response) =
   }
 });
 
+// ── Slots & agenda ─────────────────────────────────────────────────────────────
+// GET /api/professionals/:id/slots
+// La page slots lit le professionnel complet (incluant availableSlots et weeklyAvailability)
+router.get("/:id/slots", requireRole("admin"), param("id").isMongoId(),
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const pro = await Professional.findById(req.params.id)
+        .select("firstName lastName type availableSlots weeklyAvailability personalMeetingLink meetingProvider sessionDuration isOnline isInPerson")
+        .lean();
+      if (!pro) return res.status(404).json({ error: "Professionnel introuvable" });
+      // La page slots attend { professional: {...} } ou directement l'objet
+      res.json({ professional: pro });
+    } catch {
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  }
+);
+
+// PUT /api/professionals/:id/slots — Remplacer les créneaux
+router.put("/:id/slots", requireRole("admin"), param("id").isMongoId(),
+  [
+    body("slots").isArray(),
+    body("weeklyAvailability").optional().isArray(),
+  ],
+  async (req: AdminRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+      const pro = await Professional.findByIdAndUpdate(
+        req.params.id,
+        {
+          $set: {
+            availableSlots:     req.body.slots,
+            weeklyAvailability: req.body.weeklyAvailability ?? [],
+          },
+        },
+        { new: true }
+      ).lean();
+      if (!pro) return res.status(404).json({ error: "Professionnel introuvable" });
+      logger.info(`Slots updated for professional ${req.params.id} by ${req.admin?.email}`);
+      res.json({ professional: pro });
+    } catch (err) {
+      logger.error("Slots update: " + err);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  }
+);
+
 // GET /api/professionals/:id
 router.get("/:id", requireRole("admin"), param("id").isMongoId(),
   async (req: AdminRequest, res: Response) => {
@@ -84,11 +132,17 @@ router.patch("/:id", requireRole("super_admin"), param("id").isMongoId(),
     body("currency").optional().trim(),
     body("specialties").optional().isArray(),
     body("isActive").optional().isBoolean(),
+    body("personalMeetingLink").optional(),
+    body("meetingProvider").optional().isIn(["jitsi", "whereby", "zoom", "meet", null]),
   ],
   async (req: AdminRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-    const ALLOWED = ["firstName","lastName","type","sessionPrice","email","phone","city","currency","specialties","isActive","photo","rating"];
+    const ALLOWED = [
+      "firstName","lastName","type","sessionPrice","email","phone","city",
+      "currency","specialties","isActive","photo","rating",
+      "personalMeetingLink","meetingProvider","sessionDuration","isOnline","isInPerson",
+    ];
     const update: any = {};
     ALLOWED.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k]; });
     try {
@@ -100,15 +154,11 @@ router.patch("/:id", requireRole("super_admin"), param("id").isMongoId(),
   }
 );
 
-// PATCH /api/professionals/:id/verify — Vérifier (admin)
+// PATCH /api/professionals/:id/verify
 router.patch("/:id/verify", requireRole("admin"), param("id").isMongoId(),
   async (req: AdminRequest, res: Response) => {
     try {
-      const pro = await Professional.findByIdAndUpdate(
-        req.params.id,
-        { isVerified: true },
-        { new: true }
-      );
+      const pro = await Professional.findByIdAndUpdate(req.params.id, { isVerified: true }, { new: true });
       if (!pro) return res.status(404).json({ error: "Professionnel introuvable" });
       logger.info(`Professional verified: ${req.params.id} by ${req.admin?.email}`);
       res.json({ data: { isVerified: true } });
@@ -116,7 +166,7 @@ router.patch("/:id/verify", requireRole("admin"), param("id").isMongoId(),
   }
 );
 
-// PATCH /api/professionals/:id/toggle — Activer/Désactiver (admin)
+// PATCH /api/professionals/:id/toggle
 router.patch("/:id/toggle", requireRole("admin"), param("id").isMongoId(),
   async (req: AdminRequest, res: Response) => {
     try {
@@ -130,7 +180,7 @@ router.patch("/:id/toggle", requireRole("admin"), param("id").isMongoId(),
   }
 );
 
-// DELETE /api/professionals/:id (super_admin)
+// DELETE /api/professionals/:id
 router.delete("/:id", requireRole("super_admin"), param("id").isMongoId(),
   async (req: AdminRequest, res: Response) => {
     try {
