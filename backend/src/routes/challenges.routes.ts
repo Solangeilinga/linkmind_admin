@@ -71,9 +71,27 @@ router.post("/", requireRole("super_admin"),
 
 // PATCH /api/challenges/:id — Modifier (super_admin)
 router.patch("/:id", requireRole("super_admin"), param("id").isMongoId(),
+  [
+    body("title").optional().trim(),
+    body("description").optional().trim(),
+    body("category").optional().isIn(CATEGORIES),
+    body("difficulty").optional().isIn(DIFFICULTIES),
+    body("durationMinutes").optional().isInt({ min: 1 }),
+    body("points").optional().isInt({ min: 1 }),
+    body("icon").optional().trim(),
+    body("isPremium").optional().isBoolean(),
+    body("isActive").optional().isBoolean(),
+    body("order").optional().isInt({ min: 0 }),
+    body("completionType.type").optional().isIn(COMPLETION_TYPES),
+  ],
   async (req: AdminRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const ALLOWED = ["title","description","category","difficulty","durationMinutes","points","icon","isPremium","isActive","order","completionType","instructions","targetLevel"];
+    const update: any = {};
+    ALLOWED.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k]; });
     try {
-      const updated = await Challenge.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      const updated = await Challenge.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
       if (!updated) return res.status(404).json({ error: "Défi introuvable" });
       logger.info(`Challenge updated: ${req.params.id} by ${req.admin?.email}`);
       res.json({ data: updated });

@@ -33,8 +33,13 @@ export const protect = (
   }
 
   const token = header.split(" ")[1];
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    logger.error("JWT_SECRET is not set — refusing all requests");
+    return res.status(500).json({ error: "Configuration serveur manquante" });
+  }
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "") as any;
+    const decoded = jwt.verify(token, secret) as any;
     if (!decoded.isAdmin) {
       return res.status(403).json({ error: "Accès admin requis" });
     }

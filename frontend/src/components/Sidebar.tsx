@@ -46,17 +46,24 @@ export default function Sidebar() {
   useEffect(() => {
     const fetchBadges = async () => {
       try {
-        const [b, c] = await Promise.all([
-          api.get<{ pending: number }>("/api/bookings/stats"),
-          api.get<{ pending: number }>("/api/content/stats"),
-        ]);
-        setBadges({ bookings: b.pending, content: c.pending });
+        const results: Record<string, number> = {};
+        // Bookings stats : admin+ seulement
+        if (hasAccess(role, "admin")) {
+          const b = await api.get<{ pending: number }>("/api/bookings/stats");
+          results.bookings = b.pending;
+        }
+        // Content stats : moderator+ seulement
+        if (hasAccess(role, "moderator")) {
+          const c = await api.get<{ pending: number }>("/api/content/stats");
+          results.content = c.pending;
+        }
+        setBadges(results);
       } catch { /* silencieux */ }
     };
     fetchBadges();
     const interval = setInterval(fetchBadges, 60_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [role]);
 
   const visibleNav = NAV_ALL.filter(item => hasAccess(role, item.minRole));
 

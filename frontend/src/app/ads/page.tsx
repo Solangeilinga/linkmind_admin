@@ -271,6 +271,44 @@ export default function AdsPage() {
                 <input type="checkbox" checked={!!editing.isActive} onChange={e=>setEditing((p:any)=>({...p,isActive:e.target.checked}))} className="rounded"/>
                 <span className="text-sm text-gray-700">Activer immédiatement</span>
               </label>
+              {/* Ciblage */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Ciblage & planification</p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Date de début</label>
+                    <input type="date" value={editing.startsAt ? editing.startsAt.slice(0,10) : ""} onChange={e=>setEditing((p:any)=>({...p,startsAt:e.target.value||undefined}))}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Date de fin</label>
+                    <input type="date" value={editing.endsAt ? editing.endsAt.slice(0,10) : ""} onChange={e=>setEditing((p:any)=>({...p,endsAt:e.target.value||undefined}))}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Âge min</label>
+                    <input type="number" min="0" max="120" value={editing.targetAgeMin||""} onChange={e=>setEditing((p:any)=>({...p,targetAgeMin:e.target.value?Number(e.target.value):undefined}))}
+                      placeholder="18" className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Âge max</label>
+                    <input type="number" min="0" max="120" value={editing.targetAgeMax||""} onChange={e=>setEditing((p:any)=>({...p,targetAgeMax:e.target.value?Number(e.target.value):undefined}))}
+                      placeholder="65" className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Ville cible</label>
+                    <input value={editing.targetCity||""} onChange={e=>setEditing((p:any)=>({...p,targetCity:e.target.value}))}
+                      placeholder="Dakar" className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">URL de l&apos;image</label>
+                  <input type="url" value={editing.imageUrl||""} onChange={e=>setEditing((p:any)=>({...p,imageUrl:e.target.value}))}
+                    placeholder="https://..." className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={()=>setModal(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50">Annuler</button>

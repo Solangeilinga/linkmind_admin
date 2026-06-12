@@ -73,9 +73,26 @@ router.post("/", requireRole("super_admin"),
 
 // PATCH /api/professionals/:id — Modifier (super_admin)
 router.patch("/:id", requireRole("super_admin"), param("id").isMongoId(),
+  [
+    body("firstName").optional().trim(),
+    body("lastName").optional().trim(),
+    body("type").optional().isIn(TYPES),
+    body("sessionPrice").optional().isNumeric(),
+    body("email").optional().isEmail().normalizeEmail(),
+    body("phone").optional().trim(),
+    body("city").optional().trim(),
+    body("currency").optional().trim(),
+    body("specialties").optional().isArray(),
+    body("isActive").optional().isBoolean(),
+  ],
   async (req: AdminRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const ALLOWED = ["firstName","lastName","type","sessionPrice","email","phone","city","currency","specialties","isActive","photo","rating"];
+    const update: any = {};
+    ALLOWED.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k]; });
     try {
-      const updated = await Professional.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      const updated = await Professional.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
       if (!updated) return res.status(404).json({ error: "Professionnel introuvable" });
       logger.info(`Professional updated: ${req.params.id} by ${req.admin?.email}`);
       res.json({ data: updated });

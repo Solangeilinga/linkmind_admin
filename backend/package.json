@@ -7,7 +7,8 @@
     "dev": "cross-env NODE_ENV=development nodemon --exec ts-node src/index.ts",
     "build": "tsc",
     "start": "cross-env NODE_ENV=production node dist/src/index.js",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "seed": "npx ts-node src/seed.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -20,7 +21,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.3",
     "morgan": "^1.10.0",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "express-rate-limit": "^7.1.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -31,6 +33,7 @@
     "@types/node": "^20.0.0",
     "nodemon": "^3.0.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "@types/express-rate-limit": "^6.0.0"
   }
 }

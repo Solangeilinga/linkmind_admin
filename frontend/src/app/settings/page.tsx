@@ -2,15 +2,61 @@
 import { useState } from "react";
 import Sidebar   from "@/components/Sidebar";
 import AuthGuard from "@/components/AuthGuard";
-import { getAdmin } from "@/lib/api";
+import { getAdmin, api, saveSession } from "@/lib/api";
 
 export default function SettingsPage() {
   const admin = getAdmin();
   const [toast, setToast] = useState("");
+  const [toastType, setToastType] = useState<"ok"|"err">("ok");
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 3000);
+  // Profil
+  const [name, setName] = useState(admin?.name || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Mot de passe
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd]         = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [savingPwd, setSavingPwd]   = useState(false);
+
+  const showToast = (msg: string, type: "ok"|"err" = "ok") => {
+    setToast(msg); setToastType(type);
+    setTimeout(() => setToast(""), 3500);
+  };
+
+  const saveProfile = async () => {
+    if (!name.trim()) return showToast("⚠️ Le nom ne peut pas être vide", "err");
+    setSavingProfile(true);
+    try {
+      const res = await api.patch<{ admin: any }>("/api/auth/profile", { name: name.trim() });
+      // Mettre à jour le localStorage
+      const current = getAdmin();
+      saveSession(localStorage.getItem("adminToken")!, { ...current, name: res.admin.name });
+      showToast("✅ Profil mis à jour");
+    } catch (e: any) {
+      showToast("❌ " + e.message, "err");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const changePassword = async () => {
+    if (!currentPwd || !newPwd || !confirmPwd)
+      return showToast("⚠️ Tous les champs sont requis", "err");
+    if (newPwd !== confirmPwd)
+      return showToast("⚠️ Les mots de passe ne correspondent pas", "err");
+    if (newPwd.length < 8)
+      return showToast("⚠️ Le mot de passe doit faire au moins 8 caractères", "err");
+    setSavingPwd(true);
+    try {
+      await api.patch("/api/auth/password", { currentPassword: currentPwd, newPassword: newPwd });
+      setCurrentPwd(""); setNewPwd(""); setConfirmPwd("");
+      showToast("✅ Mot de passe mis à jour");
+    } catch (e: any) {
+      showToast("❌ " + e.message, "err");
+    } finally {
+      setSavingPwd(false);
+    }
   };
 
   return (
@@ -29,10 +75,10 @@ export default function SettingsPage() {
               <h2 className="font-semibold text-gray-900 mb-5">Profil administrateur</h2>
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-16 h-16 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-2xl font-bold">
-                  {admin?.name?.[0] || admin?.email?.[0] || "A"}
+                  {name?.[0]?.toUpperCase() || admin?.email?.[0]?.toUpperCase() || "A"}
                 </div>
                 <div>
-                  <div className="font-semibold text-gray-900">{admin?.name || "Administrateur"}</div>
+                  <div className="font-semibold text-gray-900">{name || "Administrateur"}</div>
                   <div className="text-sm text-gray-500">{admin?.email}</div>
                   <span className="inline-block mt-1 text-xs font-medium text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full capitalize">
                     {admin?.role || "analyst"}
@@ -44,7 +90,8 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom</label>
                   <input
                     type="text"
-                    defaultValue={admin?.name || ""}
+                    value={name}
+                    onChange={e => setName(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -59,10 +106,11 @@ export default function SettingsPage() {
                 </div>
               </div>
               <button
-                onClick={() => showToast("✅ Profil mis à jour")}
-                className="mt-4 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition"
+                onClick={saveProfile}
+                disabled={savingProfile}
+                className="mt-4 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-xl transition"
               >
-                Sauvegarder
+                {savingProfile ? "Enregistrement..." : "Sauvegarder"}
               </button>
             </div>
 
@@ -74,6 +122,8 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Mot de passe actuel</label>
                   <input
                     type="password"
+                    value={currentPwd}
+                    onChange={e => setCurrentPwd(e.target.value)}
                     placeholder="••••••••"
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
@@ -82,7 +132,9 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Nouveau mot de passe</label>
                   <input
                     type="password"
-                    placeholder="••••••••"
+                    value={newPwd}
+                    onChange={e => setNewPwd(e.target.value)}
+                    placeholder="Min. 8 caractères, 1 majuscule, 1 chiffre"
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -90,15 +142,18 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirmer le nouveau mot de passe</label>
                   <input
                     type="password"
+                    value={confirmPwd}
+                    onChange={e => setConfirmPwd(e.target.value)}
                     placeholder="••••••••"
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
                 <button
-                  onClick={() => showToast("✅ Mot de passe mis à jour")}
-                  className="px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition"
+                  onClick={changePassword}
+                  disabled={savingPwd}
+                  className="px-5 py-2.5 bg-gray-900 hover:bg-gray-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-xl transition"
                 >
-                  Changer le mot de passe
+                  {savingPwd ? "Modification..." : "Changer le mot de passe"}
                 </button>
               </div>
             </div>
@@ -108,7 +163,7 @@ export default function SettingsPage() {
               <h2 className="font-semibold text-gray-900 mb-4">Informations système</h2>
               <dl className="space-y-3">
                 {[
-                  { label: "Version admin",    value: "1.0.0" },
+                  { label: "Version admin",    value: "1.1.0" },
                   { label: "Backend API",       value: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000" },
                   { label: "Environnement",     value: process.env.NODE_ENV || "development" },
                 ].map(row => (
@@ -124,7 +179,7 @@ export default function SettingsPage() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 right-6 bg-gray-900 text-white px-5 py-3 rounded-xl text-sm shadow-xl z-50">
+        <div className={`fixed bottom-6 right-6 px-5 py-3 rounded-xl text-sm shadow-xl z-50 text-white ${toastType === "err" ? "bg-red-600" : "bg-gray-900"}`}>
           {toast}
         </div>
       )}

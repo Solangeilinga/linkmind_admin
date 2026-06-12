@@ -86,9 +86,32 @@ router.post("/", requireRole("super_admin"),
 
 // PATCH /api/ads/:id (super_admin)
 router.patch("/:id", requireRole("super_admin"), param("id").isMongoId(),
+  [
+    body("title").optional().trim().isLength({ max: 60 }),
+    body("description").optional().trim().isLength({ max: 120 }),
+    body("category").optional().isIn(CATEGORIES),
+    body("placement").optional().isArray().custom((v: string[]) =>
+      v.every((p: string) => PLACEMENTS.includes(p))
+    ),
+    body("advertiser").optional().trim(),
+    body("ctaUrl").optional().isURL(),
+    body("ctaLabel").optional().trim().isLength({ max: 30 }),
+    body("isActive").optional().isBoolean(),
+    body("startsAt").optional().isISO8601(),
+    body("endsAt").optional().isISO8601(),
+    body("targetAgeMin").optional().isInt({ min: 0 }),
+    body("targetAgeMax").optional().isInt({ min: 0 }),
+    body("targetCity").optional().trim(),
+    body("emoji").optional().trim(),
+  ],
   async (req: AdminRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const ALLOWED = ["title","description","category","placement","advertiser","ctaUrl","ctaLabel","isActive","startsAt","endsAt","targetAgeMin","targetAgeMax","targetCity","emoji","imageUrl"];
+    const update: any = {};
+    ALLOWED.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k]; });
     try {
-      const updated = await Ad.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      const updated = await Ad.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
       if (!updated) return res.status(404).json({ error: "Annonce introuvable" });
       logger.info(`Ad updated: ${req.params.id} by ${req.admin?.email}`);
       res.json({ data: updated });

@@ -6,7 +6,7 @@ export interface IUser extends Document {
   email?: string;
   password?: string;
   isAdmin: boolean;
-  adminRole: "super_admin" | "moderator" | "analyst";
+  adminRole: "super_admin" | "admin" | "moderator" | "analyst";
   isActive: boolean;
   isBanned: boolean;
   banReason?: string;
@@ -22,7 +22,7 @@ const UserSchema = new Schema<IUser>(
     email:         { type: String },
     password:      { type: String },
     isAdmin:       { type: Boolean, default: false },
-    adminRole:     { type: String, enum: ["super_admin", "moderator", "analyst"], default: "analyst" },
+    adminRole:     { type: String, enum: ["super_admin", "admin", "moderator", "analyst"], default: "analyst" },
     isActive:      { type: Boolean, default: true },
     isBanned:      { type: Boolean, default: false },
     banReason:     { type: String },
